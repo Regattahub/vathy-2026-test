@@ -951,7 +951,7 @@ height: 100dvh !important;
         </tr>
         <tr id="secondCaptainSection">
           <th scope="row"><label for="secondCaptainCardInput">ΔΕΥΤΕΡΟΣ ΚΥΒΕΡΝΗΤΗΣ</label></th>
-          <td><input id="secondCaptainCardInput" class="rh-card-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="Προαιρετικό" autocomplete="off" oninput="refreshWosrSelectors()"></td>
+          <td><input id="secondCaptainCardInput" class="rh-card-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="Προαιρετικό" autocomplete="off" oninput="renumberCrewRows()"></td>
           <td><span class="rh-hint">Προαιρετικό</span></td>
         </tr>
       </tbody>
@@ -964,7 +964,7 @@ height: 100dvh !important;
         <tbody></tbody>
       </table>
     </div>
-    <div class="rh-crew-help">Το <strong>+</strong> προσθέτει νέο μέλος. Το <strong>×</strong> αφαιρεί μια γραμμή. Έως 10 μέλη πληρώματος.</div>
+    <div class="rh-crew-help">Το <strong>+</strong> προσθέτει νέο μέλος. Το <strong>×</strong> αφαιρεί μια γραμμή. Έως 15 δελτία συνολικά, μαζί με κυβερνήτες.</div>
     <div id="wosrSelectBox" style="display:none; margin:18px auto 10px; padding:12px; border:1px solid #bfb6aa; background:#f8f8f8; max-width:620px; border-radius:6px;">
       <div style="font-weight:bold; text-align:center; margin-bottom:9px;">ΜΕΛΗ ΕΞΟΙΚΕΙΩΜΕΝΑ ΜΕ ΤΙΣ ΔΙΑΔΙΚΑΣΙΕΣ WS OSR 6.05.3</div>
       <div style="font-size:13px; line-height:1.45; margin-bottom:10px;">Όπου απαιτείται από την προκήρυξη, επιλέξτε δύο διαφορετικά μέλη που διαθέτουν τις σχετικές γνώσεις.</div>
@@ -1786,6 +1786,8 @@ function getWosrName(value) {
 params.set(fieldNames.wosr_member_1, getWosrName(wosr1Value));
 params.set(fieldNames.wosr_member_2, getWosrName(wosr2Value));
   
+// Individual Jotform legacy slots exist only for members 1-10.
+// All members (up to 14) travel in crew_json and crewpdf multiline fields.
 for (let i = 1; i <= 10; i++) {
   const row = crewPdfRows[i - 1] || {};
 
@@ -2081,11 +2083,11 @@ if (secondCaptainCard && !/^\d{3,12}$/.test(secondCaptainCard)) {
         alert("Ελέγξτε τους αριθμούς δελτίων πληρώματος (3 έως 12 ψηφία).");
         return;
       }
-      if (crewRowsForCheck.length > 10) {
-        alert("Μέγιστος αριθμός: 10 μέλη πληρώματος.");
+      const allCards = [captainState.card.trim(), secondCaptainCard, ...crewRowsForCheck.map(row => row.card)].filter(Boolean);
+      if (allCards.length > 15) {
+        alert("Μέγιστος αριθμός: 15 δελτία συνολικά (μαζί με τους κυβερνήτες).");
         return;
       }
-      const allCards = [captainState.card.trim(), secondCaptainCard, ...crewRowsForCheck.map(row => row.card)].filter(Boolean);
       if (new Set(allCards).size !== allCards.length) {
         alert("Υπάρχει διπλός αριθμός δελτίου μεταξύ κυβερνητών και πληρώματος. Διορθώστε τον πριν συνεχίσετε.");
         return;
@@ -2221,7 +2223,7 @@ window.scrollTo({ top: 0, behavior: "auto" });
       document.getElementById("crewSection").style.display = "block";
       const crewBody = document.querySelector("#crewTable tbody");
       if (crewBody) crewBody.innerHTML="";
-      (state.crew || []).slice(0,10).forEach(addCrewMemberFromData);
+      (state.crew || []).slice(0,14).forEach(addCrewMemberFromData);
       if (!document.querySelector("#crewTable tbody tr")) addCrewMember();
       renumberCrewRows();
       const osr1Field = document.getElementById("wosrMember1");
@@ -2458,9 +2460,13 @@ function lookupPerson(input) { return /^\d{3,12}$/.test(String(input?.value || "
 function showSecondCaptain() { document.getElementById("secondCaptainCardInput")?.focus(); }
 function hideSecondCaptain() { const field = document.getElementById("secondCaptainCardInput"); if (field) field.value=""; refreshWosrSelectors(); }
 
+function maxAllowedCrewRows() {
+  const secondCard = String(document.getElementById("secondCaptainCardInput")?.value || "").trim();
+  return secondCard ? 13 : 14;
+}
 function addCrewMember() {
   const tbody = document.querySelector("#crewTable tbody");
-  if (!tbody || tbody.children.length >= 10) return;
+  if (!tbody || tbody.children.length >= maxAllowedCrewRows()) return;
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <th scope="row" class="rh-crew-role">ΠΛΗΡΩΜΑ <span class="rowNo"></span></th>
@@ -2474,7 +2480,7 @@ function addCrewMember() {
 }
 function addCrewMemberSafe() {
   const rows = Array.from(document.querySelectorAll("#crewTable tbody tr"));
-  if (rows.length >= 10) { alert("Μέχρι 10 μέλη πληρώματος."); return; }
+  if (rows.length >= maxAllowedCrewRows()) { alert("Μέχρι 15 δελτία συνολικά, μαζί με κυβερνήτες."); return; }
   const last = rows[rows.length-1];
   const lastCard = String(last?.querySelector("input")?.value || "").trim();
   if (!/^\d{3,12}$/.test(lastCard)) {
@@ -2593,7 +2599,7 @@ function renumberCrewRows() {
     if (num) num.textContent = String(index+1);
     const addBtn=tr.querySelector(".rh-add-member");
     const delBtn=tr.querySelector(".rh-remove-member");
-    if (addBtn) addBtn.style.display = index===rows.length-1 && rows.length<10 ? "inline-flex" : "none";
+    if (addBtn) addBtn.style.display = index===rows.length-1 && rows.length<maxAllowedCrewRows() ? "inline-flex" : "none";
     if (delBtn) delBtn.style.display = rows.length>1 ? "inline-flex" : "none";
   });
   refreshWosrSelectors();
@@ -2617,7 +2623,7 @@ function loadCrewFromJson(crewJson) {
   if (!Array.isArray(members)) return;
   const tbody=document.querySelector("#crewTable tbody");
   if (tbody) tbody.innerHTML="";
-  members.slice(0,10).forEach(addCrewMemberFromData);
+  members.slice(0,14).forEach(addCrewMemberFromData);
   if (!document.querySelector("#crewTable tbody tr")) addCrewMember();
   renumberCrewRows();
 }
