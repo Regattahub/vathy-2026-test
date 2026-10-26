@@ -2317,7 +2317,7 @@ async function continueToForm() {
         vathyPrefetchedLookup = null;
         boatName.textContent = "Δεν ήταν δυνατή η αναγνώριση";
         boatSail.textContent = "";
-        boatHelp.textContent = "Ο προσωπικός σύνδεσμος ενδέχεται να έχει λήξει. Επικοινωνήστε με τη γραμματεία για νέο σύνδεσμο.";
+        boatHelp.textContent = error.message || "Δεν ήταν δυνατή η αναγνώριση της συμμετοχής.";
       } finally {
         landingContinueBtn.disabled = false;
       }
