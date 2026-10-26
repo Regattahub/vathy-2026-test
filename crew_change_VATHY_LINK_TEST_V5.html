@@ -1704,7 +1704,7 @@ function buildCrewTextForPdf() {
 
   return text.trimEnd();
 }
-function boatLookupJsonp(sailNumber, submissionId) {
+function boatLookupJsonpOriginal(sailNumber, submissionId) {
   return new Promise(function (resolve, reject) {
     const callbackName =
       "__boatLookupCallback_" +
@@ -1758,6 +1758,82 @@ function boatLookupJsonp(sailNumber, submissionId) {
     document.body.appendChild(script);
   });
 }
+
+/*
+ * VATHY V5: Personal lookup without the user's Google account cookies.
+ * Chrome/Edge use a credentialless isolated frame. The original JSONP
+ * remains available for manual boat searches and other browsers.
+ */
+function boatLookupJsonp(sailNumber, submissionId) {
+  if (!submissionId || !("credentialless" in document.createElement("iframe"))) {
+    return boatLookupJsonpOriginal(sailNumber, submissionId);
+  }
+
+  return new Promise(function (resolve, reject) {
+    const frame = document.createElement("iframe");
+    const requestId = "rh_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+    const callbackName = "__boatLookupCallback_" + requestId;
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("editToken") || "";
+    const separator = BOAT_LOOKUP_URL.includes("?") ? "&" : "?";
+    const url = BOAT_LOOKUP_URL + separator +
+      "action=submissionLookup&submissionId=" + encodeURIComponent(submissionId) +
+      "&editToken=" + encodeURIComponent(token) +
+      "&callback=" + encodeURIComponent(callbackName) +
+      "&_=" + Date.now();
+
+    const safe = function (value) {
+      return JSON.stringify(value).replace(/</g, "\\u003c");
+    };
+
+    let timeoutId = null;
+    let completed = false;
+    const finish = function (error, data) {
+      if (completed) return;
+      completed = true;
+      clearTimeout(timeoutId);
+      window.removeEventListener("message", onMessage);
+      frame.remove();
+      if (error) {
+        // If credentialless loading is blocked, preserve the original behavior.
+        boatLookupJsonpOriginal(sailNumber, submissionId).then(resolve, reject);
+      } else {
+        resolve(data);
+      }
+    };
+
+    function onMessage(event) {
+      if (event.source !== frame.contentWindow) return;
+      const message = event.data;
+      if (!message || message.rhRequest !== requestId) return;
+      if (message.error) {
+        finish(new Error("Αποτυχία επικοινωνίας με το σύστημα αναζήτησης."));
+      } else {
+        finish(null, message.data);
+      }
+    }
+
+    frame.credentialless = true;
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.setAttribute("aria-hidden", "true");
+    frame.tabIndex = -1;
+    frame.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden;pointer-events:none";
+    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' +
+      'window[' + safe(callbackName) + ']=function(data){parent.postMessage({rhRequest:' + safe(requestId) +
+      ',data:data},' + safe(window.location.origin) + ');};' +
+      'var s=document.createElement("script");s.src=' + safe(url) + ';' +
+      's.onerror=function(){parent.postMessage({rhRequest:' + safe(requestId) +
+      ',error:true},' + safe(window.location.origin) + ');};' +
+      'document.head.appendChild(s);' +
+      '<\/script></body></html>';
+
+    window.addEventListener("message", onMessage);
+    timeoutId = setTimeout(function () {
+      finish(new Error("Η αναζήτηση άργησε να απαντήσει."));
+    }, 12000);
+    document.body.appendChild(frame);
+  });
+}
+
     async function searchBoat() {
       
       const acceptTerms = document.getElementById("acceptTermsCheck");
